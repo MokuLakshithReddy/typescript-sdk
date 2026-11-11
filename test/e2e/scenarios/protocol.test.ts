@@ -750,21 +750,27 @@ verifies('protocol:timeout:reset-on-progress', async ({ transport }: TestArgs) =
         const received: number[] = [];
         let settled: 'resolved' | 'rejected' | undefined;
 
-        const call = client
-            .callTool(
-                { name: 'slow-progress', arguments: { steps, delayMs } },
-                {
-                    timeout,
-                    resetTimeoutOnProgress: true,
-                    onprogress: p => {
-                        received.push(p.progress);
-                    }
+        const call = client.callTool(
+            { name: 'slow-progress', arguments: { steps, delayMs } },
+            {
+                timeout,
+                resetTimeoutOnProgress: true,
+                onprogress: p => {
+                    received.push(p.progress);
                 }
-            )
-            .then(
-                r => ((settled = 'resolved'), r),
-                error => ((settled = 'rejected'), Promise.reject(error))
-            );
+            }
+        );
+
+        // Observe settlement without creating a second rejected promise. The original call is
+        // awaited below; re-rejecting here creates an unhandled rejection on known-failing SSE cells.
+        void call.then(
+            () => {
+                settled = 'resolved';
+            },
+            () => {
+                settled = 'rejected';
+            }
+        );
 
         for (let i = 1; i <= steps; i++) {
             await vi.advanceTimersByTimeAsync(delayMs);
